@@ -1,5 +1,4 @@
 use ansi_term::Colour::{Blue, Green, Red, Yellow};
-use ansi_term::Style;
 use anyhow::anyhow;
 use anyhow::Error as AnyError;
 use anyhow::Result;
@@ -7,6 +6,7 @@ use clap::Clap;
 use once_cell::sync::Lazy;
 use std::ffi::OsStr;
 use std::path::Path;
+use glob::glob;
 
 #[derive(Clap)]
 #[clap(version = "1.0", author = "Mickaël Leduque <mleduque@gmail.com>")]
@@ -52,6 +52,7 @@ fn main() -> Result<()> {
     copy_item(source, target, "start.sh")?;
     link_item(source, target, "gameinfo")?;
     link_item(source, target, "support")?;
+    process_dlc_zips(source, target)?;
     create_dir_str(target, "game")?;
 
     process_game_dir(&source.join("game"), &target.join("game"))?;
@@ -97,6 +98,29 @@ fn create_dir_str(target: &Path, item: &str) -> Result<()> {
 
 fn create_dir_os(target: &Path, item: &OsStr) -> Result<()> {
     std::fs::create_dir(target.join(item))?;
+    Ok(())
+}
+
+fn process_dlc_zips(source: &Path, target: &Path) -> Result<()> {
+    link_pattern_files(source, target, "*-dlc.zip")
+}
+
+fn link_pattern_files(source: &Path, target: &Path, pattern: &str) -> Result<()> {
+    for entry in glob(source.join(pattern).to_str().unwrap())? {
+        match entry {
+            Ok(path) => {
+                if !path.is_dir() {
+                    if let Some(name) = path.file_name() {
+                        link_item_os(source, target, name)?;
+                    }
+                }
+            }
+            Err(err) => {
+                println!("{}", Red.bold().paint(format!("{}", err)));
+                return Err(err)?;
+            }
+        }
+    }
     Ok(())
 }
 
@@ -147,7 +171,6 @@ fn process_game_dir(source: &Path, target: &Path) -> Result<()> {
     let root_override_dir = source.join("override");
     if root_override_dir.exists() {
         println!("{}", Blue.bold().paint(" => override"));
-        create_dir_str(target, "movies")?;
         process_override_dir(&root_override_dir, &target.join("override"))?;
     } else {
         println!("{}", Yellow.paint(format!("no {}", root_override_dir.to_string_lossy())));
@@ -166,7 +189,9 @@ fn copy_content(source: &Path, target: &Path) -> Result<()> {
     let scripts = source.read_dir()?;
     for file in scripts {
         let file = file?;
-        copy_item_os(source, target, &file.file_name())?;
+        if let Err(error) = copy_item_os(source, target, &file.file_name()) {
+            return Err(anyhow!("Error copying file {:?} from {:?} to {:?}\n  ->{:?}", file.file_name(), source, target, error));
+        }
     }
     Ok(())
 }
@@ -237,7 +262,7 @@ fn process_language(source: &Path, target: &Path, language_mark: &str) -> Result
     }
     let source_override_dir = source.join("override");
     if source_override_dir.exists() {
-        let target_override_dir = target.join("sounds");
+        let target_override_dir = target.join("override");
         println!(
             "{} to {}",
             Blue.bold().paint(source_override_dir.to_string_lossy()),
