@@ -233,7 +233,7 @@ fn process_language(source: &Path, target: &Path, language_mark: &str) -> Result
         Green.paint(target.to_string_lossy())
     );
 
-    link_non_dirs(source, target)?; // tlk
+    copy_non_dirs(source, target)?; // tlk
     let source_movies_dir = source.join("movies");
     if source_movies_dir.exists() {
         let target_movies_dir = target.join("movies");
@@ -311,6 +311,16 @@ fn link_non_dirs(source: &Path, target: &Path) -> Result<()> {
         let file = file?;
         if !file.file_type()?.is_dir() {
             link_item_os(source, target, &file.file_name())?;
+        }
+    }
+    Ok(())
+}
+fn copy_non_dirs(source: &Path, target: &Path) -> Result<()> {
+    let files = source.read_dir()?;
+    for file in files {
+        let file = file?;
+        if !file.file_type()?.is_dir() {
+            copy_item_os(source, target, &file.file_name())?;
         }
     }
     Ok(())
